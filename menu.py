@@ -41,11 +41,16 @@ def connect_to_server():
     except Exception as e:
         messagebox.showerror("Помилка", f"Не вдалося підключитись\n{e}")
 
-def send_message():
+def send_message(message=None):
     msg = message_entry.get().strip()
+    if message:
+        sio.send(f"Готовність: {message}")
     if msg:
         sio.send(f"{nickname}: {msg}")
         message_entry.delete(0, "end")
+
+def status_active():
+    send_message("/ready")
 
 def add_message(text):
     chat_box.configure(state="normal")
@@ -111,6 +116,18 @@ message_entry = ctk.CTkEntry(
     font=ctk.CTkFont(size=14)
 )
 message_entry.pack(side="left", fill="x", expand=True, padx=(0, 10), ipady=5)
+
+
+ctk.CTkButton(
+    bottom_frame,
+    text="Готово",
+    width=90,
+    fg_color="#45af45",
+    hover_color="#71f571",
+    font=ctk.CTkFont(size=14, weight="bold"),
+    corner_radius=12,
+    command=status_active
+).pack(side="right", ipady=5)
 
 ctk.CTkButton(
     bottom_frame,

@@ -3,7 +3,7 @@ import tkinter.messagebox as mb
 import random
 
 SIZE = 10
-SHIPS_CONFIG = {4: 1, 3: 2, 2: 3, 1: 4}  # довжина: кількість
+SHIPS_CONFIG = {4: 1, 3: 2, 2: 3, 1: 4}
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -19,13 +19,12 @@ class SeaBattle:
         self.board_player = [["~"] * SIZE for _ in range(SIZE)]
         self.board_ai = [["~"] * SIZE for _ in range(SIZE)]
 
-        # список кораблів, які треба розставити
         self.ships_to_place = []
         for length, count in SHIPS_CONFIG.items():
             self.ships_to_place += [length] * count
 
-        self.placing_orientation = "H"  # орієнтація H/V
-        self.phase = "placing"  # placing / game
+        self.placing_orientation = "H"
+        self.phase = "placing"
 
         self.info = ctk.CTkLabel(
             root, text=f"Розставте корабель довжиною {self.ships_to_place[0]}",
@@ -36,31 +35,36 @@ class SeaBattle:
         self.frame = ctk.CTkFrame(root, corner_radius=15)
         self.frame.pack(pady=10)
 
-        self.orient_btn = ctk.CTkButton(root, text="Повернути (H/V)", command=self.toggle_orientation)
-        self.orient_btn.pack(pady=5)
-
         self.start_btn = ctk.CTkButton(root, text="Почати гру", command=self.start_game, state="disabled")
         self.start_btn.pack(pady=5)
 
         self.result = ctk.CTkLabel(root, text="", font=ctk.CTkFont(size=14))
         self.result.pack(pady=5)
 
+        self.cells = [[None] * SIZE for _ in range(SIZE)]
+        self.preview_coords = []
+        self.hover_r = -1
+        self.hover_c = -1
+
         self.draw_board()
 
-    def toggle_orientation(self):
-        self.placing_orientation = "V" if self.placing_orientation == "H" else "H"
+        # Прив'язка клавіш W/A/S/D
+        self.root.bind("<w>", lambda e: self.change_orientation("V"))
+        self.root.bind("<s>", lambda e: self.change_orientation("V"))
+        self.root.bind("<a>", lambda e: self.change_orientation("H"))
+        self.root.bind("<d>", lambda e: self.change_orientation("H"))
+
+    def change_orientation(self, orient):
+        self.placing_orientation = orient
+        if self.hover_r != -1 and self.hover_c != -1:
+            self.update_preview(self.hover_r, self.hover_c)
 
     def draw_board(self):
-        for w in self.frame.winfo_children():
-            w.destroy()
-
-        target_board = self.board_player if self.phase == "placing" else self.board_ai
-
         for r in range(SIZE):
             for c in range(SIZE):
-                cell = target_board[r][c]
-                color = None
+                color = "#2f2f2f"
                 text = ""
+                cell = self.board_player[r][c]
 
                 if self.phase == "placing" and cell == "S":
                     color = "#00bfff"
@@ -82,6 +86,40 @@ class SeaBattle:
                     command=lambda r=r, c=c: self.cell_click(r, c)
                 )
                 btn.grid(row=r, column=c, padx=2, pady=2)
+                self.cells[r][c] = btn
+
+                if self.phase == "placing":
+                    btn.bind("<Enter>", lambda e, r=r, c=c: self.update_preview(r, c))
+                    btn.bind("<Leave>", lambda e: None)
+
+    def update_preview(self, r, c):
+        # скидаємо попередні preview
+        for rr, cc in self.preview_coords:
+            if self.board_player[rr][cc] != "S":
+                self.cells[rr][cc].configure(fg_color="#2f2f2f")
+        self.preview_coords.clear()
+
+        self.hover_r = r
+        self.hover_c = c
+
+        if r == -1 or not self.ships_to_place:
+            return
+
+        length = self.ships_to_place[0]
+        coords = []
+        valid = True
+        for i in range(length):
+            rr = r + i if self.placing_orientation == "V" else r
+            cc = c + i if self.placing_orientation == "H" else c
+            if rr >= SIZE or cc >= SIZE or self.board_player[rr][cc] == "S":
+                valid = False
+                break
+            coords.append((rr, cc))
+
+        color = "#3399ff" if valid else "#ff4d4d"
+        for rr, cc in coords:
+            self.cells[rr][cc].configure(fg_color=color)
+            self.preview_coords.append((rr, cc))
 
     def cell_click(self, r, c):
         if self.phase == "placing":
@@ -90,14 +128,11 @@ class SeaBattle:
             self.player_shoot(r, c)
 
     def can_place_ship(self, r, c, length, orientation):
-        """Перевіряємо, чи можна розмістити корабель"""
-        coords = []
         for i in range(length):
             rr = r + i if orientation == "V" else r
             cc = c + i if orientation == "H" else c
             if rr >= SIZE or cc >= SIZE or self.board_player[rr][cc] == "S":
                 return False
-            coords.append((rr, cc))
         return True
 
     def place_ship(self, r, c):
@@ -116,21 +151,23 @@ class SeaBattle:
 
         self.ships_to_place.pop(0)
         if self.ships_to_place:
-            self.info.configure(text=f"Розставте корабель довжиною {self.ships_to_place[0]}")
+            self.info.configure(text=f"Розставте корабель довжиною {self.ships_to_place[0]} ({self.placing_orientation})")
         else:
             self.info.configure(text="Всі кораблі розставлено!")
             self.start_btn.configure(state="normal")
 
+        self.preview_coords.clear()
+        self.hover_r = -1
+        self.hover_c = -1
         self.draw_board()
 
     def start_game(self):
         self.phase = "game"
         self.info.configure(text="Гра почалася! Ваш хід")
         self.start_btn.configure(state="disabled")
-        self.orient_btn.configure(state="disabled")
         self.result.configure(text="")
 
-        # Розставляємо AI кораблі випадково
+        # AI розставлення
         for length, count in SHIPS_CONFIG.items():
             for _ in range(count):
                 placed = False
@@ -169,7 +206,6 @@ class SeaBattle:
             self.result.configure(text="")
             return
 
-        # Хід AI
         self.ai_shoot()
 
     def ai_shoot(self):

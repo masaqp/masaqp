@@ -13,12 +13,16 @@ def handle_connect(auth):
     usernema=auth.get("name") 
 
     players[request.sid] = {
-        "name":usernema
+        "name":usernema,
+        "status":False
     }
 
     if (len(players)==2):
 
         socketio.send ("гра почалась") 
+        socketio.send(str(players))
+    else:
+        socketio.send(str(players))
 
 @socketio.on("disconnect")
 def handle_disconnect():
@@ -28,7 +32,11 @@ def handle_disconnect():
 @socketio.on("message")
 def handle_message(msg):
     print(f"📩 Отримано нове повідомлення від {request.sid}: {msg}")
-    send(msg, broadcast=True)  # відправка всім клієнтам
+    if "Готовність" not in msg:
+        send(msg, broadcast=True)  # відправка всім клієнтам
+    else:
+        # Отримання статусу від гравця
+        pass
 
 
 print("🚀 Сервер почав роботу")

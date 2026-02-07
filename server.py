@@ -6,6 +6,12 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 players={}
 
+def checkStart(slovnik):
+    for key in slovnik:
+        if not slovnik[key]['status']:
+            return False
+    return True
+
 @socketio.on("connect")
 def handle_connect(auth):
     print(f"✅ Клієнт {request.sid} доєднався!")
@@ -34,7 +40,11 @@ def handle_message(msg):
     print(f"📩 Отримано нове повідомлення від {request.sid}: {msg}")
     if "Готовність" not in msg:
         send(msg, broadcast=True)  # відправка всім клієнтам
-    else:
+
+    elif '/ready' in msg:
+        # сигнал для клієнтів про старт гри + зміна UI в клієнтів
+        print(players)
+            # print("Гра стартує")
         # Отримання статусу від гравця
         pass
 

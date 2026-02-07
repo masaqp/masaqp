@@ -12,6 +12,10 @@ def checkStart(slovnik):
             return False
     return True
 
+def changeStatus(id):
+    players[id]['status'] = True
+
+
 @socketio.on("connect")
 def handle_connect(auth):
     print(f"✅ Клієнт {request.sid} доєднався!")
@@ -23,12 +27,12 @@ def handle_connect(auth):
         "status":False
     }
 
-    if (len(players)==2):
+    # if (len(players)==2):
 
-        socketio.send ("гра почалась") 
-        socketio.send(str(players))
-    else:
-        socketio.send(str(players))
+    #     socketio.send ("гра почалась") 
+    #     socketio.send(str(players))
+    # else:
+    socketio.send(str(players))
 
 @socketio.on("disconnect")
 def handle_disconnect():
@@ -38,13 +42,15 @@ def handle_disconnect():
 @socketio.on("message")
 def handle_message(msg):
     print(f"📩 Отримано нове повідомлення від {request.sid}: {msg}")
+    changeStatus(request.sid)
     if "Готовність" not in msg:
         send(msg, broadcast=True)  # відправка всім клієнтам
 
     elif '/ready' in msg:
+
         # сигнал для клієнтів про старт гри + зміна UI в клієнтів
-        print(players)
-            # print("Гра стартує")
+        if checkStart(players) and len(players) == 2:
+            print("Гра стартує")
         # Отримання статусу від гравця
         pass
 

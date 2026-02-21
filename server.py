@@ -1,59 +1,69 @@
 from flask import Flask, request
 from flask_socketio import SocketIO, send
+import eventlet
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-players={}
+players = {}
 
-def checkStart(slovnik):
-    for key in slovnik:
-        if not slovnik[key]['status']:
+def check_start():
+    if len(players) != 2:
+        return False
+    for player in players.values():
+        print(player)
+        if not player["status"]:
             return False
     return True
-
-def changeStatus(id):
-    players[id]['status'] = True
 
 
 @socketio.on("connect")
 def handle_connect(auth):
     print(f"✅ Клієнт {request.sid} доєднався!")
 
-    usernema=auth.get("name") 
+    username = auth.get("name") if auth else "Unknown"
 
     players[request.sid] = {
-        "name":usernema,
-        "status":False
+        "name": username,
+        "status": False
     }
 
-    # if (len(players)==2):
+    send(f"🔵 {username} приєднався до гри", broadcast=True)
 
-    #     socketio.send ("гра почалась") 
-    #     socketio.send(str(players))
-    # else:
-    socketio.send(str(players))
 
 @socketio.on("disconnect")
 def handle_disconnect():
+    if request.sid in players:
+        name = players[request.sid]["name"]
+        del players[request.sid]
+        send(f"❌ {name} покинув гру", broadcast=True)
+
     print(f"❌ Клієнт {request.sid} відключився")
 
 
 @socketio.on("message")
 def handle_message(msg):
-    print(f"📩 Отримано нове повідомлення від {request.sid}: {msg}")
-    changeStatus(request.sid)
-    if "Готовність" not in msg:
-        send(msg, broadcast=True)  # відправка всім клієнтам
+    print(f"📩 {request.sid}: {msg}")
 
-    elif '/ready' in msg:
+    if request.sid not in players:
+        return
 
-        # сигнал для клієнтів про старт гри + зміна UI в клієнтів
-        if checkStart(players) and len(players) == 2:
-            print("Гра стартує")
-        # Отримання статусу від гравця
-        pass
+    # READY
+    if msg == "/ready":
+        players[request.sid]["status"] = True
+        name = players[request.sid]["name"]
+
+        send(f"🟢 {name} готовий!", broadcast=True)
+
+        if check_start():
+            send("🎮 ГРА ПОЧИНАЄТЬСЯ!", broadcast=True)
+            socketio.emit("game_start")
+        return
+
+    # звичайний чат
+    send(msg, broadcast=True)
 
 
-print("🚀 Сервер почав роботу")
-socketio.run(app, host="0.0.0.0", port=5000)
+if __name__ == "__main__":
+    print("🚀 Сервер запущено")
+    socketio.run(app, host="0.0.0.0", port=5000)

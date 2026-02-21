@@ -27,8 +27,10 @@ class SeaBattle:
         self.phase = "placing"
 
         self.info = ctk.CTkLabel(
-            root, text=f"Розставте корабель довжиною {self.ships_to_place[0]}",
-            font=ctk.CTkFont(size=16, weight="bold")
+            root, text=f"Розставте корабель довжиною {self.ships_to_place[0]} (H/→/← - горизонтально, V/↑/↓ - вертикально)",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            wraplength=580,
+            justify="center"
         )
         self.info.pack(pady=10)
 
@@ -48,16 +50,22 @@ class SeaBattle:
 
         self.draw_board()
 
-        # Прив'язка клавіш W/A/S/D
+        # Прив'язка клавіш W/A/S/D + стрілок
         self.root.bind("<w>", lambda e: self.change_orientation("V"))
         self.root.bind("<s>", lambda e: self.change_orientation("V"))
         self.root.bind("<a>", lambda e: self.change_orientation("H"))
         self.root.bind("<d>", lambda e: self.change_orientation("H"))
+        self.root.bind("<Up>", lambda e: self.change_orientation("V"))
+        self.root.bind("<Down>", lambda e: self.change_orientation("V"))
+        self.root.bind("<Left>", lambda e: self.change_orientation("H"))
+        self.root.bind("<Right>", lambda e: self.change_orientation("H"))
 
     def change_orientation(self, orient):
         self.placing_orientation = orient
         if self.hover_r != -1 and self.hover_c != -1:
             self.update_preview(self.hover_r, self.hover_c)
+        if self.ships_to_place:
+            self.info.configure(text=f"Розставте корабель довжиною {self.ships_to_place[0]} ({self.placing_orientation})")
 
     def draw_board(self):
         for r in range(SIZE):

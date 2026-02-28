@@ -1,26 +1,26 @@
 import customtkinter as ctk
-import tkinter.messagebox as mb
+from tkinter import messagebox
+import socketio
+import random
 
+# ---------- SOCKET ----------
+sio = socketio.Client()
+nickname = ""
+
+# ---------- GAME SETTINGS ----------
 SIZE = 10
 SHIPS_CONFIG = {4: 1, 3: 2, 2: 3, 1: 4}
 
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
-
-
+# ---------- SEA BATTLE CLASS ----------
 class SeaBattle:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Морський бій (1 гравець)")
-        self.root.geometry("600x750")
-        self.root.resizable(False, False)
+    def __init__(self, parent):
+        self.parent = parent
 
-        # Поля для гравця та "суперника"
+        # Поля для гравця та "супротивника"
         self.board_player = [["~"] * SIZE for _ in range(SIZE)]
         self.board_enemy = [["~"] * SIZE for _ in range(SIZE)]
 
         self.phase = "placing"
-
         self.reset_ships()
         self.placing_orientation = "H"
         self.hover_r = -1
@@ -29,7 +29,7 @@ class SeaBattle:
 
         # Інформаційна панель
         self.info = ctk.CTkLabel(
-            root,
+            parent,
             text=f"Розставте корабель {self.ships_to_place[0]} (H/→ - горизонтально, V/↑ - вертикально)",
             font=ctk.CTkFont(size=14, weight="bold"),
             wraplength=580,
@@ -37,24 +37,24 @@ class SeaBattle:
         )
         self.info.pack(pady=10)
 
-        self.frame = ctk.CTkFrame(root)
+        self.frame = ctk.CTkFrame(parent)
         self.frame.pack(pady=10)
 
-        self.result = ctk.CTkLabel(root, text="", font=ctk.CTkFont(size=14))
+        self.result = ctk.CTkLabel(parent, text="", font=ctk.CTkFont(size=14))
         self.result.pack(pady=5)
 
         self.cells = [[None] * SIZE for _ in range(SIZE)]
         self.draw_board()
 
         # Прив'язка клавіш для орієнтації кораблів
-        self.root.bind("<w>", lambda e: self.change_orientation("V"))
-        self.root.bind("<s>", lambda e: self.change_orientation("V"))
-        self.root.bind("<Up>", lambda e: self.change_orientation("V"))
-        self.root.bind("<Down>", lambda e: self.change_orientation("V"))
-        self.root.bind("<a>", lambda e: self.change_orientation("H"))
-        self.root.bind("<d>", lambda e: self.change_orientation("H"))
-        self.root.bind("<Left>", lambda e: self.change_orientation("H"))
-        self.root.bind("<Right>", lambda e: self.change_orientation("H"))
+        parent.bind_all("<w>", lambda e: self.change_orientation("V"))
+        parent.bind_all("<s>", lambda e: self.change_orientation("V"))
+        parent.bind_all("<Up>", lambda e: self.change_orientation("V"))
+        parent.bind_all("<Down>", lambda e: self.change_orientation("V"))
+        parent.bind_all("<a>", lambda e: self.change_orientation("H"))
+        parent.bind_all("<d>", lambda e: self.change_orientation("H"))
+        parent.bind_all("<Left>", lambda e: self.change_orientation("H"))
+        parent.bind_all("<Right>", lambda e: self.change_orientation("H"))
 
     def reset_ships(self):
         self.ships_to_place = []
@@ -155,7 +155,7 @@ class SeaBattle:
 
         length = self.ships_to_place[0]
         if not self.can_place_ship(r, c, length):
-            mb.showwarning("Помилка", "Неможливо розмістити корабель тут!")
+            messagebox.showwarning("Помилка", "Неможливо розмістити корабель тут!")
             return
 
         for i in range(length):
@@ -171,7 +171,6 @@ class SeaBattle:
         if not self.ships_to_place:
             self.phase = "game"
             self.info.configure(text="Гра почалася! Стріляйте по полі супротивника")
-            # випадкове поле для тренування
             self.board_enemy = [["~"] * SIZE for _ in range(SIZE)]
         else:
             self.info.configure(
@@ -185,7 +184,7 @@ class SeaBattle:
         if cell in ("X", "O"):
             return
 
-        # випадкова логіка для тренування (неправда AI, просто маркуємо)
+        # випадкова логіка для тренування
         if random.random() < 0.3:  # 30% шанс попадання
             self.board_enemy[r][c] = "X"
             self.result.configure(text="🔥 ПОПАВ!")
@@ -196,6 +195,114 @@ class SeaBattle:
         self.draw_board()
 
 
-root = ctk.CTk()
-game = SeaBattle(root)
-root.mainloop()
+# ---------- SOCKET EVENTS ----------
+@sio.event
+def connect():
+    add_message("✅ Підключено до сервера")
+
+@sio.event
+def disconnect():
+    add_message("❌ Відключено від сервера")
+
+@sio.on("message")
+def on_message(data):
+    add_message(data)
+
+@sio.on("game_start")
+def on_game_start():
+    add_message("🎮 Гра починається! Розставте свої кораблі.")
+    chat_frame.pack_forget()  # Сховати чат
+    start_ship_placement()     # Почати розстановку кораблів
+
+
+# ---------- FUNCTIONS ----------
+def connect_to_server():
+    global nickname
+    nickname = name_entry.get().strip()
+    if nickname == "":
+        messagebox.showwarning("Помилка", "Введіть нікнейм!")
+        return
+
+    try:
+        sio.connect("http://127.0.0.1:5000", auth={"name": nickname})
+        start_frame.pack_forget()
+        chat_frame.pack(fill="both", expand=True)
+    except Exception as e:
+        messagebox.showerror("Помилка", f"Не вдалося підключитись\n{e}")
+
+
+def send_message():
+    msg = message_entry.get().strip()
+    if msg:
+        sio.send(f"{nickname}: {msg}")
+        message_entry.delete(0, "end")
+
+
+def status_active():
+    sio.send("/ready")
+
+
+def add_message(text):
+    chat_box.configure(state="normal")
+    chat_box.insert("end", text + "\n")
+    chat_box.configure(state="disabled")
+    chat_box.see("end")
+
+
+def start_ship_placement():
+    global game
+    ship_frame = ctk.CTkFrame(app)
+    ship_frame.pack(fill="both", expand=True, pady=10, padx=10)
+    game = SeaBattle(ship_frame)
+
+
+def close_app():
+    if sio.connected:
+        sio.disconnect()
+    app.destroy()
+
+
+# ---------- UI SETUP ----------
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+app = ctk.CTk()
+app.title("Game Client")
+app.geometry("600x700")
+app.protocol("WM_DELETE_WINDOW", close_app)
+
+# ---------- START FRAME ----------
+start_frame = ctk.CTkFrame(app)
+start_frame.pack(pady=50, padx=50, fill="both", expand=True)
+
+ctk.CTkLabel(
+    start_frame,
+    text="🎮 Вхід у гру",
+    font=ctk.CTkFont(size=28, weight="bold")
+).pack(pady=20)
+
+name_entry = ctk.CTkEntry(start_frame, placeholder_text="Ваш нікнейм")
+name_entry.pack(pady=15)
+
+ctk.CTkButton(
+    start_frame,
+    text="ПІДКЛЮЧИТИСЬ",
+    command=connect_to_server
+).pack(pady=25)
+
+# ---------- CHAT FRAME ----------
+chat_frame = ctk.CTkFrame(app)
+
+chat_box = ctk.CTkTextbox(chat_frame, state="disabled")
+chat_box.pack(padx=10, pady=10, fill="both", expand=True)
+
+bottom_frame = ctk.CTkFrame(chat_frame)
+bottom_frame.pack(fill="x", padx=10, pady=10)
+
+message_entry = ctk.CTkEntry(bottom_frame)
+message_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+ctk.CTkButton(bottom_frame, text="SEND", command=send_message).pack(side="right")
+ctk.CTkButton(bottom_frame, text="Готово", command=status_active).pack(side="right", padx=5)
+
+app.mainloop()
